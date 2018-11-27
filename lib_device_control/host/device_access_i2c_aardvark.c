@@ -8,9 +8,9 @@
 #include "control_host.h"
 #include "control_host_support.h"
 
-#define DBG(x) x
-// #define DBG(x)
-#define I2C_BITRATE   400
+//#define DBG(x) x
+#define DBG(x)
+#define I2C_BITRATE   100
 
 static Aardvark handle;
 static AardvarkExt aaext;
@@ -57,9 +57,7 @@ control_ret_t control_init_i2c(unsigned char i2c_slave_address)
   }
 
   aa_configure(handle, AA_CONFIG_SPI_I2C);
-  aa_i2c_pullup(handle, AA_I2C_PULLUP_BOTH);
-  int bitrate = aa_i2c_bitrate(handle, I2C_BITRATE);
-  DBG(("Bitrate set to %d kHz\n", bitrate));
+  aa_i2c_bitrate(handle, I2C_BITRATE);
 
   DBG(printf("Opened Aardvark adapter; slave_addr = 0x%02x, features = 0x%02x\n", slave_addr, aaext.features));
 
@@ -72,12 +70,11 @@ static control_ret_t write_read(unsigned char data_to_send[I2C_TRANSACTION_MAX_B
   u16 num_bytes_sent;
   u16 num_bytes_read;
   control_ret_t ret = CONTROL_ERROR;
+  AardvarkI2cFlags flags = AA_I2C_NO_FLAGS;
 
-  int status = aa_i2c_write_read(handle, slave_addr, AA_I2C_NO_FLAGS, 
+  int status = aa_i2c_write_read(handle, slave_addr, flags,
     (u16)data_len, data_to_send, &num_bytes_sent,
     (u16)recv_len, data_to_recv, &num_bytes_read);
-
-  fprintf(stderr, "I2C Error while sending: %s\n", aa_status_string(status));
 
   // Check error codes
   if ((status & 0xFF) < 0) {
@@ -101,29 +98,12 @@ static control_ret_t write_read(unsigned char data_to_send[I2C_TRANSACTION_MAX_B
   return ret;
 }
 
-control_ret_t control_query_version(control_version_t *version)
-{
-  unsigned char data_to_send[I2C_TRANSACTION_MAX_BYTES];
-  unsigned char data_to_recv[I2C_TRANSACTION_MAX_BYTES];
-
-  int data_len = control_build_i2c_data(data_to_send, CONTROL_SPECIAL_RESID, 
-    CONTROL_GET_VERSION, version, sizeof(control_version_t));
-
-  control_ret_t ret = write_read(data_to_send, data_len, data_to_recv, sizeof(control_version_t));
-  if (ret == CONTROL_SUCCESS) {
-    memcpy(version, data_to_recv, sizeof(control_version_t));
-    DBG(printf("Version returned: 0x%X\n", *version));
-  }
-
-  return ret;
-}
-
 control_ret_t
 control_write_command(control_resid_t resid, control_cmd_t cmd,
                       const uint8_t payload[], size_t payload_len)
 {
   unsigned char data_to_send[I2C_TRANSACTION_MAX_BYTES];
-  int data_len = control_build_i2c_data(data_to_send, resid, cmd, payload, payload_len);
+  int data_len = control_build_i2c_data(data_to_send, resid, CONTROL_CMD_SET_WRITE(cmd), payload, payload_len);
   int num_bytes_sent = aa_i2c_write(handle, slave_addr, AA_I2C_NO_FLAGS, (u16)data_len, data_to_send);
 
   if (num_bytes_sent < 0) {
@@ -133,6 +113,7 @@ control_write_command(control_resid_t resid, control_cmd_t cmd,
   } else if (num_bytes_sent != data_len) {
     fprintf(stderr, "I2C Error: Only a partial number of bytes written. %d instead of %d\n", num_bytes_sent, data_len);
   }
+  
   return CONTROL_SUCCESS;
 }
 
@@ -143,7 +124,7 @@ control_read_command(control_resid_t resid, control_cmd_t cmd,
   unsigned char data_to_send[I2C_TRANSACTION_MAX_BYTES];
   unsigned char data_to_recv[I2C_TRANSACTION_MAX_BYTES];
 
-  int data_len = control_build_i2c_data(data_to_send, resid, cmd, payload, payload_len);
+  int data_len = control_build_i2c_data(data_to_send, resid, CONTROL_CMD_SET_READ(cmd), payload, payload_len);
   if (data_len != 3) {
     fprintf(stderr, "Error building read command section of read_device. data_len should be 3 but is %d\n", data_len);
     return CONTROL_ERROR;
@@ -154,7 +135,6 @@ control_read_command(control_resid_t resid, control_cmd_t cmd,
   if (ret == CONTROL_SUCCESS) {
     memcpy(payload, data_to_recv, payload_len);
   }
-  //aa_sleep_ms(10);
 
   return ret;
 }
