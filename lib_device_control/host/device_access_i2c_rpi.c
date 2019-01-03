@@ -66,7 +66,7 @@ control_write_command(control_resid_t resid, control_cmd_t cmd,
                       const uint8_t payload[], size_t payload_len)
 {
   unsigned char buffer_to_send[I2C_TRANSACTION_MAX_BYTES + 3];
-  int len = control_build_i2c_data(buffer_to_send, resid, cmd, payload, payload_len);
+  int len = control_build_i2c_data(buffer_to_send, resid, CONTROL_CMD_SET_WRITE(cmd), payload, payload_len);
 
   DBG(printf("%u: send write command: ", num_commands));
   DBG(print_bytes((unsigned char*)buffer_to_send, payload_len));
@@ -87,7 +87,7 @@ control_read_command(control_resid_t resid, control_cmd_t cmd,
                      uint8_t payload[], size_t payload_len)
 {
   unsigned char read_hdr[I2C_TRANSACTION_MAX_BYTES];
-  unsigned len = control_build_i2c_data(read_hdr, resid, cmd, payload, payload_len);
+  unsigned len = control_build_i2c_data(read_hdr, resid, CONTROL_CMD_SET_READ(cmd), payload, payload_len);
   if (len != 3){
     fprintf(stderr, "Error building read command section of read_device. len should be 3 but is %d\n", len);
     return CONTROL_ERROR;
